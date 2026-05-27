@@ -136,7 +136,7 @@ export default function ProfilePage() {
                 </div>
 
                 <div className="pt-4 flex justify-end">
-                  <PrimaryButton className="h-10 px-6" disabled={loading}>
+                  <PrimaryButton type="submit" className="h-10 px-6" disabled={loading}>
                     {loading ? <Loader2 className="w-4 h-4 animate-spin mr-2 inline" /> : null}
                     Save Changes
                   </PrimaryButton>
