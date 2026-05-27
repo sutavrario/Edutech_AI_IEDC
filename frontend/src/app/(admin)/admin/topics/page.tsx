@@ -190,7 +190,7 @@ export default function TopicsPage() {
         {row.description && <span className="text-xs text-gray-500 truncate max-w-[250px]">{row.description}</span>}
       </div>
     )},
-    { key: "hierarchy", label: "Hierarchy", render: (_, row: any) => {
+    { key: "hierarchy", label: "Hierarchy", render: (_: any, row: any) => {
       const data = getChapterData(row.chapter_id);
       return (
         <div className="flex flex-col gap-1">

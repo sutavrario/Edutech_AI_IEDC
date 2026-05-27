@@ -148,7 +148,7 @@ export default function ChaptersPage() {
         <span className="font-medium text-gray-900">{v}</span>
       </div>
     )},
-    { key: "class", label: "Class", render: (_, row: any) => (
+    { key: "class", label: "Class", render: (_: any, row: any) => (
       <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-blue-50 text-blue-700">
         {getClassNameForSubject(row.subject_id)}
       </span> 
