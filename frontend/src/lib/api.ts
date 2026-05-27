@@ -19,5 +19,9 @@ export async function fetchWithAuth(endpoint: string, options: RequestInit = {})
     throw new Error(errorData.detail || 'An error occurred during the request.');
   }
 
+  if (response.status === 204) {
+    return null;
+  }
+
   return response.json();
 }
