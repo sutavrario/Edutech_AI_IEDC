@@ -1,0 +1,27 @@
+# node
+node_modules/
+.next/
+npm-debug.log
+yarn-error.log
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+env/
+ENV/
+.env
+*.sqlite
+*.db
+
+# macOS
+.DS_Store
+
+# IDEs
+.vscode/
+.idea/
