@@ -13,17 +13,20 @@ export default function ChaptersPage() {
   const [chapters, setChapters] = useState<any[]>([]);
   const [classes, setClasses] = useState<any[]>([]);
   const [subjects, setSubjects] = useState<any[]>([]);
+  const [boards, setBoards] = useState<any[]>([]);
   
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   
   // Filters
+  const [filterBoardId, setFilterBoardId] = useState<number | "">("");
   const [filterClassId, setFilterClassId] = useState<number | "">("");
   const [filterSubjectId, setFilterSubjectId] = useState<number | "">("");
 
   // Modal State
   const [modal, setModal] = useState<{ type: "add" | "edit"; item?: any } | null>(null);
   const [name, setName] = useState("");
+  const [selectedBoardId, setSelectedBoardId] = useState<number | "">("");
   const [selectedClassId, setSelectedClassId] = useState<number | "">("");
   const [selectedSubjectId, setSelectedSubjectId] = useState<number | "">("");
   const [modalLoading, setModalLoading] = useState(false);
@@ -37,14 +40,16 @@ export default function ChaptersPage() {
   useEffect(() => {
     const init = async () => {
       try {
-        const [clsRes, subjRes, chRes] = await Promise.all([
+        const [clsRes, subjRes, chRes, bRes] = await Promise.all([
           fetchWithAuth("/syllabus/classes"),
           fetchWithAuth("/syllabus/subjects"),
-          fetchWithAuth("/syllabus/chapters")
+          fetchWithAuth("/syllabus/chapters"),
+          fetchWithAuth("/syllabus/boards")
         ]);
         setClasses(clsRes);
         setSubjects(subjRes);
         setChapters(chRes);
+        setBoards(bRes);
       } catch (e) {
         console.error(e);
       } finally {
@@ -89,18 +94,31 @@ export default function ChaptersPage() {
 
   const filtered = chapters.filter((c) => {
     const matchesSearch = c.name.toLowerCase().includes(search.toLowerCase());
+    if (!matchesSearch) return false;
+
+    // Filters check
+    if (filterSubjectId && c.subject_id !== filterSubjectId) return false;
+    
     if (filterClassId && !filterSubjectId) {
-      // If a class is selected but NO subject is selected, we need to filter chapters
-      // where the chapter's subject belongs to this class.
       const belongsToClass = subjects.some(s => s.id === c.subject_id && s.class_id === filterClassId);
-      return matchesSearch && belongsToClass;
+      if (!belongsToClass) return false;
     }
-    return matchesSearch;
+
+    if (filterBoardId && !filterClassId && !filterSubjectId) {
+      const belongsToBoard = subjects.some(s => {
+        if (s.id !== c.subject_id) return false;
+        const cls = classes.find(cl => cl.id === s.class_id);
+        return cls && cls.board_id === filterBoardId;
+      });
+      if (!belongsToBoard) return false;
+    }
+
+    return true;
   });
 
   const handleSubmit = async () => {
     if (!name.trim()) { setModalError("Chapter name cannot be empty"); return; }
-    if (modal?.type === "add" && !selectedSubjectId) { setModalError("Please select a subject"); return; }
+    if (modal?.type === "add" && (!selectedBoardId || !selectedClassId || !selectedSubjectId)) { setModalError("Please select a board, class, and subject"); return; }
     
     setModalLoading(true); 
     setModalError("");
@@ -175,7 +193,7 @@ export default function ChaptersPage() {
         <motion.button 
           whileHover={{ scale: 1.02 }} 
           whileTap={{ scale: 0.98 }} 
-          onClick={() => { setModal({ type: "add" }); setName(""); setSelectedClassId(""); setSelectedSubjectId(""); setModalError(""); }}
+          onClick={() => { setModal({ type: "add" }); setName(""); setSelectedBoardId(""); setSelectedClassId(""); setSelectedSubjectId(""); setModalError(""); }}
           className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-white bg-[#5A4BDA] hover:bg-[#4A3BCA] rounded-xl transition-colors shadow-sm"
         >
           <Plus className="w-4 h-4" /> Add Chapter
@@ -183,29 +201,44 @@ export default function ChaptersPage() {
       </div>
       
       {/* Filters */}
-      <div className="mb-4 flex flex-col sm:flex-row items-center gap-3 bg-white p-3 rounded-2xl border border-gray-100 shadow-sm">
+      <div className="mb-4 flex flex-col sm:flex-row items-center gap-3 bg-white p-3 rounded-2xl border border-gray-100 shadow-sm flex-wrap">
         <div className="flex items-center gap-2 text-gray-500 text-sm font-medium px-2">
           <Filter className="w-4 h-4" /> Filter by:
         </div>
+        
         <select 
+          value={filterBoardId} 
+          onChange={(e) => {
+            setFilterBoardId(e.target.value ? Number(e.target.value) : "");
+            setFilterClassId("");
+            setFilterSubjectId("");
+          }}
+          className="w-full sm:flex-1 px-4 py-2 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#5A4BDA]/20 text-gray-700"
+        >
+          <option value="">All Boards</option>
+          {boards.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+        </select>
+        
+        <select 
+          disabled={!filterBoardId}
           value={filterClassId} 
           onChange={(e) => {
             setFilterClassId(e.target.value ? Number(e.target.value) : "");
             setFilterSubjectId(""); // Reset subject filter when class changes
           }}
-          className="w-full sm:w-auto px-4 py-2 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#5A4BDA]/20 text-gray-700"
+          className="w-full sm:flex-1 px-4 py-2 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#5A4BDA]/20 text-gray-700 disabled:opacity-50"
         >
           <option value="">All Classes</option>
-          {classes.map((c) => <option key={c.id} value={c.id}>{c.class_name}</option>)}
+          {classes.filter(c => c.board_id === filterBoardId).map((c) => <option key={c.id} value={c.id}>{c.class_name}</option>)}
         </select>
         
         <select 
           disabled={!filterClassId && filterSubjectsList.length === 0}
           value={filterSubjectId} 
           onChange={(e) => setFilterSubjectId(e.target.value ? Number(e.target.value) : "")}
-          className="w-full sm:w-auto px-4 py-2 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#5A4BDA]/20 text-gray-700 disabled:opacity-50"
+          className="w-full sm:flex-1 px-4 py-2 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#5A4BDA]/20 text-gray-700 disabled:opacity-50"
         >
-          <option value="">All Subjects in Class</option>
+          <option value="">All Subjects</option>
           {filterSubjectsList.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
         </select>
       </div>
@@ -227,19 +260,36 @@ export default function ChaptersPage() {
           {modalError && <div className="p-3 bg-red-50 text-red-600 text-sm rounded-xl border border-red-100">{modalError}</div>}
           
           {modal?.type === "add" && (
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Board</label>
+                <select 
+                  value={selectedBoardId} 
+                  onChange={(e) => {
+                    setSelectedBoardId(e.target.value ? Number(e.target.value) : "");
+                    setSelectedClassId("");
+                    setSelectedSubjectId("");
+                  }}
+                  className="w-full px-4 py-2.5 text-sm bg-gray-50/80 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#5A4BDA]/20"
+                >
+                  <option value="">Select Board...</option>
+                  {boards.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                </select>
+              </div>
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">Class</label>
                 <select 
+                  disabled={!selectedBoardId}
                   value={selectedClassId} 
                   onChange={(e) => {
                     setSelectedClassId(e.target.value ? Number(e.target.value) : "");
                     setSelectedSubjectId("");
                   }}
-                  className="w-full px-4 py-2.5 text-sm bg-gray-50/80 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#5A4BDA]/20"
+                  className="w-full px-4 py-2.5 text-sm bg-gray-50/80 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#5A4BDA]/20 disabled:opacity-50"
                 >
                   <option value="">Select Class...</option>
-                  {classes.map((c) => <option key={c.id} value={c.id}>{c.class_name}</option>)}
+                  {classes.filter(c => c.board_id === selectedBoardId).map((c) => <option key={c.id} value={c.id}>{c.class_name}</option>)}
                 </select>
               </div>
               

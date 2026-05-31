@@ -12,11 +12,14 @@ import { Library, Plus, Loader2, Filter } from "lucide-react";
 export default function SubjectsPage() {
   const [subjects, setSubjects] = useState<any[]>([]);
   const [classes, setClasses] = useState<any[]>([]);
+  const [boards, setBoards] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [filterClassId, setFilterClassId] = useState<number | null>(null);
+  const [filterBoardId, setFilterBoardId] = useState<number | "">("");
+  const [filterClassId, setFilterClassId] = useState<number | "">("");
   const [modal, setModal] = useState<{ type: "add" | "edit"; item?: any } | null>(null);
   const [name, setName] = useState("");
+  const [selectedBoardId, setSelectedBoardId] = useState<number | "">("");
   const [selectedClassId, setSelectedClassId] = useState<number | "">("");
   const [modalLoading, setModalLoading] = useState(false);
   const [modalError, setModalError] = useState("");
@@ -25,23 +28,32 @@ export default function SubjectsPage() {
 
   const fetchAll = async () => {
     try {
-      const [s, c] = await Promise.all([
+      const [s, c, b] = await Promise.all([
         fetchWithAuth(filterClassId ? `/syllabus/subjects?class_id=${filterClassId}` : "/syllabus/subjects"),
         fetchWithAuth("/syllabus/classes"),
+        fetchWithAuth("/syllabus/boards"),
       ]);
-      setSubjects(s); setClasses(c);
+      setSubjects(s); setClasses(c); setBoards(b);
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
   };
 
   useEffect(() => { setLoading(true); fetchAll(); }, [filterClassId]);
 
-  const filtered = subjects.filter((s) => s.name.toLowerCase().includes(search.toLowerCase()));
+  const filtered = subjects.filter((s) => {
+    const matchesSearch = s.name.toLowerCase().includes(search.toLowerCase());
+    if (!matchesSearch) return false;
+    if (filterBoardId && !filterClassId) {
+      const cls = classes.find(c => c.id === s.class_id);
+      if (!cls || cls.board_id !== filterBoardId) return false;
+    }
+    return true;
+  });
   const getClassName = (id: number) => classes.find((c) => c.id === id)?.class_name || "—";
 
   const handleSubmit = async () => {
     if (!name.trim()) { setModalError("Subject name cannot be empty"); return; }
-    if (modal?.type === "add" && !selectedClassId) { setModalError("Please select a class"); return; }
+    if (modal?.type === "add" && (!selectedBoardId || !selectedClassId)) { setModalError("Please select a board and class"); return; }
     setModalLoading(true); setModalError("");
     try {
       if (modal?.type === "add") {
@@ -79,17 +91,24 @@ export default function SubjectsPage() {
           <div className="p-2 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-500"><Library className="w-5 h-5 text-white" /></div>
           <div><h1 className="text-2xl font-bold text-gray-900">Subjects</h1><p className="text-sm text-gray-500">Manage subjects within classes</p></div>
         </div>
-        <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} onClick={() => { setModal({ type: "add" }); setName(""); setSelectedClassId(""); setModalError(""); }}
+        <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} onClick={() => { setModal({ type: "add" }); setName(""); setSelectedBoardId(""); setSelectedClassId(""); setModalError(""); }}
           className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-white bg-[#5A4BDA] hover:bg-[#4A3BCA] rounded-xl transition-colors shadow-sm">
           <Plus className="w-4 h-4" />Add Subject
         </motion.button>
       </div>
-      <div className="mb-4 flex items-center gap-2">
-        <Filter className="w-4 h-4 text-gray-400" />
-        <select value={filterClassId || ""} onChange={(e) => setFilterClassId(e.target.value ? Number(e.target.value) : null)}
-          className="px-3 py-2 text-sm bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#5A4BDA]/20 text-gray-700">
-          <option value="">All Classes</option>
-          {classes.map((c) => <option key={c.id} value={c.id}>{c.class_name}</option>)}
+      <div className="mb-4 flex flex-col sm:flex-row items-center gap-3 bg-white p-3 rounded-2xl border border-gray-100 shadow-sm">
+        <div className="flex items-center gap-2 text-gray-500 text-sm font-medium px-2">
+          <Filter className="w-4 h-4" /> Filter by:
+        </div>
+        <select value={filterBoardId} onChange={(e) => { setFilterBoardId(e.target.value ? Number(e.target.value) : ""); setFilterClassId(""); }}
+          className="w-full sm:w-auto px-4 py-2 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#5A4BDA]/20 text-gray-700">
+          <option value="">All Boards</option>
+          {boards.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+        </select>
+        <select disabled={!filterBoardId} value={filterClassId} onChange={(e) => setFilterClassId(e.target.value ? Number(e.target.value) : "")}
+          className="w-full sm:w-auto px-4 py-2 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#5A4BDA]/20 text-gray-700 disabled:opacity-50">
+          <option value="">All Classes in Board</option>
+          {classes.filter(c => c.board_id === filterBoardId).map((c) => <option key={c.id} value={c.id}>{c.class_name}</option>)}
         </select>
       </div>
       <AdminTable columns={columns} data={filtered} isLoading={loading} searchQuery={search} onSearchChange={setSearch}
@@ -101,12 +120,24 @@ export default function SubjectsPage() {
         <form onSubmit={(e) => { e.preventDefault(); handleSubmit(); }} className="space-y-4">
           {modalError && <div className="p-3 bg-red-50 text-red-600 text-sm rounded-xl border border-red-100">{modalError}</div>}
           {modal?.type === "add" && (
-            <div><label className="block text-sm font-medium text-gray-700 mb-1.5">Class</label>
-              <select value={selectedClassId} onChange={(e) => setSelectedClassId(Number(e.target.value))}
-                className="w-full px-4 py-2.5 text-sm bg-gray-50/80 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#5A4BDA]/20">
-                <option value="">Select a class...</option>
-                {classes.map((c) => <option key={c.id} value={c.id}>{c.class_name}</option>)}
-              </select></div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Board</label>
+                <select value={selectedBoardId} onChange={(e) => { setSelectedBoardId(e.target.value ? Number(e.target.value) : ""); setSelectedClassId(""); }}
+                  className="w-full px-4 py-2.5 text-sm bg-gray-50/80 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#5A4BDA]/20">
+                  <option value="">Select Board...</option>
+                  {boards.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Class</label>
+                <select disabled={!selectedBoardId} value={selectedClassId} onChange={(e) => setSelectedClassId(e.target.value ? Number(e.target.value) : "")}
+                  className="w-full px-4 py-2.5 text-sm bg-gray-50/80 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#5A4BDA]/20 disabled:opacity-50">
+                  <option value="">Select Class...</option>
+                  {classes.filter(c => c.board_id === selectedBoardId).map((c) => <option key={c.id} value={c.id}>{c.class_name}</option>)}
+                </select>
+              </div>
+            </div>
           )}
           <div><label className="block text-sm font-medium text-gray-700 mb-1.5">Subject Name</label>
             <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g., Mathematics, Physics..."
